@@ -1,0 +1,16 @@
+build/
+
+# Tool caches / local stores
+tools/csv-viewer/node_modules/
+tools/csv-viewer/dist/
+tools/mlflow/.venv/
+tools/mlflow/mlruns/
+tools/datasette/.venv/
+tools/datasette/wtap_results.db
+
+# Sweep / tuner logs (keep CSVs)
+results/**/*.log
+results/parameter-control/irace/irace.Rdata
+results/parameter-control/irace/irace.stderr
+results/parameter-control/irace/irace.stdout
+data/

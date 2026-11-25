@@ -1,0 +1,4 @@
+bash tools/irace/apply_best.sh        # latest irace run
+bash tools/irace/apply_best.sh 2      # irace run 2
+
+MAX_EXPERIMENTS=500 bash tools/irace/start.sh

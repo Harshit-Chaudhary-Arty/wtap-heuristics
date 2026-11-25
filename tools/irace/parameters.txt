@@ -1,0 +1,6 @@
+# Parameter space for algorithms/parameter_control_heuristic
+# time_limit is fixed at 16s in target-runner (solver minimum / default).
+# Cost = final objective (minimized).
+
+min_improvement "--min_improvement " r (0.001, 0.2)
+top_percent     "--top_percent "     r (5.0, 100.0)

@@ -1,0 +1,28 @@
+############################################################
+## irace scenario for parameter_control_heuristic
+## Tunable: min_improvement, top_percent
+## Fixed:   time_limit_seconds = 16
+############################################################
+
+execDir = "../../results/parameter-control/irace"
+logFile = "irace.Rdata"
+
+parameterFile = "./parameters.txt"
+targetRunner  = "./target-runner"
+
+# Absolute instance paths are listed here (see instances/instances.list).
+trainInstancesDir  = ""
+trainInstancesFile = "./instances/instances.list"
+
+# Budget: number of target-runner calls (one config × one instance).
+maxExperiments = 300
+
+# Deterministic solver for these knobs.
+deterministic = 1
+
+# Prefer lower final objectives. With deterministic=1, irace uses paired tests.
+firstTest = 15
+eachTest = 1
+
+seed = 42
+debugLevel = 1

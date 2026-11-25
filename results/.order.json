@@ -1,0 +1,17 @@
+{
+  "algorithms": [
+    "Fixed Order Sequencial.csv",
+    "Global Selection.csv",
+    "mmr-fast-local-search.csv",
+    "greedy-local-search.csv",
+    "mmr-phased-local-search.csv",
+    "mmr-circular-local-search.csv",
+    "mmr-top50-3-cycles.csv"
+  ],
+  "parameter-control/irace": [
+    "(100)-config-2.csv",
+    "(500)-config-1.csv",
+    "(1000)-config-3.csv",
+    "(1500)-config-4.csv"
+  ]
+}
