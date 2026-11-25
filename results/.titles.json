@@ -7,5 +7,6 @@
   "algorithms/mmr-circular-local-search.csv": "MMR + LS (P) + 3K",
   "algorithms/mmr-top50-3-cycles.csv": "MMR + LS (P) + 3k + 50%",
   "parameter-control/irace/(1500)-config-7.csv": "(1500) Config 7 - first15",
-  "parameter-control/Irace Algo Result/(1500)-applied-7.csv": "(1500) Applied 7 - first 15"
+  "parameter-control/Irace Algo Result/(1500)-applied-7.csv": "(1500) Applied 7 - first 15",
+  "algorithms/circular-4-cycle.csv": "MMR + LS (P) + 4K + 50%"
 }

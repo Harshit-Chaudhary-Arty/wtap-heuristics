@@ -5,11 +5,21 @@
  * infrastructure headers (parser / mmr / objective / wtap) are included.
  *
  * Controllable knobs:
- *   min_improvement  - round stopping threshold (default 0.01)
+ *   min_improvement  - round stopping threshold (default 0.01).
+ *                      0 means "no threshold": keep going until a whole round
+ *                      finds no improving move (best-improvement to convergence).
  *   top_percent      - share of ranked k-cycle combos to keep (default 50)
  *   time_limit       - per-instance wall-clock budget in seconds
- *                      (default and minimum 16)
+ *                      (default and minimum 16; pass a huge value for "no limit")
  *   cycle_size       - weapons in one k-cycle (default 3, range 3..16)
+ *
+ * One program for every cycle size. The kept top_percent of C(n, k) k-cycles is
+ * chosen the same way for every k:
+ *   - C(n, k) <= PARAM_MAX_STORED_CYCLES: the ranked list is stored in memory.
+ *   - larger (e.g. k = 4 on 200 weapons): nothing is stored. An exact score cutoff
+ *     is found by radix selection and C(n, k) is re-enumerated on each cycle scan,
+ *     skipping combos below the cutoff. Same kept set, almost no memory.
+ *   - above PARAM_MAX_ENUMERATED_CYCLES: refused up front, before any instance runs.
  *
  * Usage:
  *   ./build/parameter_control_heuristic \
@@ -50,8 +60,15 @@
 #define PARAM_DEFAULT_CYCLE_SIZE 3
 #define PARAM_MIN_CYCLE_SIZE 3
 #define PARAM_MAX_CYCLE_SIZE 16
-/* Full C(n, k) list is ranked, then trimmed. Above this, refuse instead of exhausting memory. */
+/* Up to this many k-cycles the full ranked list is kept in memory (80 bytes each). */
+#ifndef PARAM_MAX_STORED_CYCLES
 #define PARAM_MAX_STORED_CYCLES 8000000ULL
+#endif
+/* Above that the list is not stored; C(n, k) is re-enumerated per scan instead.
+ * Beyond this many combinations even enumeration is too slow, so refuse. */
+#ifndef PARAM_MAX_ENUMERATED_CYCLES
+#define PARAM_MAX_ENUMERATED_CYCLES 4000000000ULL
+#endif
 #define PARAM_EPS 1e-10
 #define PARAM_MAX_PHASE_ITERATIONS 10000
 /* Improving k-cycle moves accepted before a round returns to relocation and swap. */
@@ -89,6 +106,30 @@ typedef struct {
     double score;
     uint64_t generation_order;
 } CycleCandidate;
+
+/* The kept top_percent of all C(n, k) k-cycles, in one of two representations. */
+typedef struct {
+    int n;                      /* weapons */
+    int k;                      /* cycle size */
+    uint64_t count;             /* number of kept k-cycles */
+    int streaming;              /* 0: `stored` holds them; 1: re-enumerate against the cutoff */
+    CycleCandidate *stored;     /* ranked list (streaming == 0) */
+    int include_all;            /* streaming: every combination is kept (top_percent 100) */
+    uint64_t cutoff_key;        /* streaming: ordered key of the lowest kept score */
+    uint64_t ties_to_keep;      /* streaming: how many combos equal to the cutoff are kept,
+                                   taken in generation order (matches the stable ranking) */
+    double weapon_max[MAX_WEAPONS];
+} CycleSet;
+
+/* Lexicographic walk over all k-subsets of 0..n-1 with running left-to-right score sums
+ * (the same additions, in the same order, as the stored-list scoring). */
+typedef struct {
+    int n;
+    int k;
+    const double *weapon_max;
+    int combo[PARAM_MAX_CYCLE_SIZE];
+    double prefix[PARAM_MAX_CYCLE_SIZE + 1];
+} ComboIter;
 
 typedef struct {
     double survival[MAX_TARGETS];
@@ -244,30 +285,122 @@ static int binomial_exceeds(int n, int k, uint64_t limit, uint64_t *out) {
     return 0;
 }
 
-static CycleCandidate *select_cycle_candidates(const WTAPInstance *inst, double top_percent,
-                                               int cycle_size, uint64_t *kept_count,
-                                               int *failed) {
+static void combo_iter_refresh(ComboIter *it, int from) {
+    for (int i = from; i < it->k; i++) {
+        it->prefix[i + 1] = it->prefix[i] + it->weapon_max[it->combo[i]];
+    }
+}
+
+static void combo_iter_init(ComboIter *it, int n, int k, const double *weapon_max) {
+    it->n = n;
+    it->k = k;
+    it->weapon_max = weapon_max;
+    for (int i = 0; i < k; i++) {
+        it->combo[i] = i;
+    }
+    it->prefix[0] = 0.0;
+    combo_iter_refresh(it, 0);
+}
+
+/* Advances to the next k-subset in generation order. Returns 0 after the last one. */
+static int combo_iter_next(ComboIter *it) {
+    int cursor = it->k - 1;
+    while (cursor >= 0 && it->combo[cursor] == it->n - it->k + cursor) {
+        cursor--;
+    }
+    if (cursor < 0) {
+        return 0;
+    }
+    it->combo[cursor]++;
+    for (int j = cursor + 1; j < it->k; j++) {
+        it->combo[j] = it->combo[j - 1] + 1;
+    }
+    combo_iter_refresh(it, cursor);
+    return 1;
+}
+
+/* Maps a double to a uint64_t that sorts in the same order as the double. */
+static uint64_t score_key(double score) {
+    uint64_t bits;
+    memcpy(&bits, &score, sizeof(bits));
+    return (bits >> 63) ? ~bits : (bits | 0x8000000000000000ULL);
+}
+
+/*
+ * Exact selection of the `keep` highest scores among all C(n, k) combinations without
+ * storing them: four 16-bit radix passes over the ordered score key. On return every
+ * combination with key > *cutoff_key is kept, plus the first *ties_to_keep (in
+ * generation order) of those with key == *cutoff_key. That is the same set as ranking
+ * by (score descending, generation order ascending) and cutting at `keep`.
+ */
+static int select_score_cutoff(int n, int k, const double *weapon_max, uint64_t keep,
+                               uint64_t *cutoff_key, uint64_t *ties_to_keep) {
+    uint64_t *histogram = malloc(65536U * sizeof(*histogram));
+    if (histogram == NULL) {
+        return 0;
+    }
+
+    uint64_t decided = 0;   /* key bits fixed by the passes so far */
+    uint64_t rank = keep;   /* 1-based rank still to find among keys matching `decided` */
+
+    for (int pass = 0; pass < 4; pass++) {
+        int shift = 48 - 16 * pass;
+        memset(histogram, 0, 65536U * sizeof(*histogram));
+
+        ComboIter it;
+        combo_iter_init(&it, n, k, weapon_max);
+        do {
+            uint64_t key = score_key(it.prefix[k]);
+            if (pass == 0 || (key >> (shift + 16)) == (decided >> (shift + 16))) {
+                histogram[(key >> shift) & 0xFFFFU]++;
+            }
+        } while (combo_iter_next(&it));
+
+        uint64_t above = 0;
+        int digit = 0;
+        for (int d = 65535; d >= 0; d--) {
+            if (above + histogram[d] >= rank) {
+                digit = d;
+                break;
+            }
+            above += histogram[d];
+        }
+        rank -= above;
+        decided |= (uint64_t)digit << shift;
+    }
+
+    free(histogram);
+    *cutoff_key = decided;
+    *ties_to_keep = rank;
+    return 1;
+}
+
+static void select_cycle_candidates(const WTAPInstance *inst, double top_percent,
+                                    int cycle_size, CycleSet *set, int *failed) {
     int n = inst->num_weapons;
     int k = cycle_size;
-    *kept_count = 0;
+    memset(set, 0, sizeof(*set));
+    set->n = n;
+    set->k = k;
     *failed = 0;
 
     if (n < k || k < PARAM_MIN_CYCLE_SIZE) {
-        return NULL;
+        return;
     }
 
     uint64_t total = 0;
-    if (binomial_exceeds(n, k, PARAM_MAX_STORED_CYCLES, &total)) {
+    int streaming = binomial_exceeds(n, k, PARAM_MAX_STORED_CYCLES, &total);
+    if (streaming && binomial_exceeds(n, k, PARAM_MAX_ENUMERATED_CYCLES, &total)) {
         fprintf(stderr,
-                "Error: C(%d, %d) exceeds %llu stored k-cycle candidates for instance %d. "
+                "Error: C(%d, %d) exceeds %llu k-cycle combinations for instance %d. "
                 "Use a smaller cycle_size.\n",
-                n, k, (unsigned long long)PARAM_MAX_STORED_CYCLES, inst->instance_id);
+                n, k, (unsigned long long)PARAM_MAX_ENUMERATED_CYCLES, inst->instance_id);
         *failed = 1;
-        return NULL;
+        return;
     }
 
     uint64_t keep = keep_count_for_percent(total, top_percent);
-    double weapon_max[MAX_WEAPONS];
+    double *weapon_max = set->weapon_max;
 
     for (int w = 0; w < n; w++) {
         double maximum = inst->prob[w][0];
@@ -279,68 +412,86 @@ static CycleCandidate *select_cycle_candidates(const WTAPInstance *inst, double 
         weapon_max[w] = maximum;
     }
 
-    if (total > SIZE_MAX / sizeof(CycleCandidate)) {
-        fprintf(stderr,
-                "Error: unable to allocate k-cycle candidates for instance %d\n",
-                inst->instance_id);
-        *failed = 1;
-        return NULL;
-    }
-    CycleCandidate *candidates = malloc((size_t)total * sizeof(*candidates));
-    if (candidates == NULL) {
-        fprintf(stderr,
-                "Error: unable to allocate k-cycle candidates for instance %d\n",
-                inst->instance_id);
-        *failed = 1;
-        return NULL;
-    }
+    if (streaming) {
+        set->streaming = 1;
+        set->count = keep;
+        if (keep >= total) {
+            set->include_all = 1;
+        } else if (keep > 0
+                   && !select_score_cutoff(n, k, weapon_max, keep,
+                                           &set->cutoff_key, &set->ties_to_keep)) {
+            fprintf(stderr,
+                    "Error: unable to allocate selection buffer for instance %d\n",
+                    inst->instance_id);
+            *failed = 1;
+            return;
+        }
+    } else {
+        if (total > SIZE_MAX / sizeof(CycleCandidate)) {
+            fprintf(stderr,
+                    "Error: unable to allocate k-cycle candidates for instance %d\n",
+                    inst->instance_id);
+            *failed = 1;
+            return;
+        }
+        CycleCandidate *candidates = malloc((size_t)total * sizeof(*candidates));
+        if (candidates == NULL) {
+            fprintf(stderr,
+                    "Error: unable to allocate k-cycle candidates for instance %d\n",
+                    inst->instance_id);
+            *failed = 1;
+            return;
+        }
 
-    int combo[PARAM_MAX_CYCLE_SIZE];
-    for (int i = 0; i < k; i++) {
-        combo[i] = i;
-    }
-
-    uint64_t index = 0;
-    while (1) {
-        double score = 0.0;
+        int combo[PARAM_MAX_CYCLE_SIZE];
         for (int i = 0; i < k; i++) {
-            candidates[index].weapon[i] = combo[i];
-            score += weapon_max[combo[i]];
+            combo[i] = i;
         }
-        candidates[index].score = score;
-        candidates[index].generation_order = index;
-        index++;
 
-        int cursor = k - 1;
-        while (cursor >= 0 && combo[cursor] == n - k + cursor) {
-            cursor--;
+        uint64_t index = 0;
+        while (1) {
+            double score = 0.0;
+            for (int i = 0; i < k; i++) {
+                candidates[index].weapon[i] = combo[i];
+                score += weapon_max[combo[i]];
+            }
+            candidates[index].score = score;
+            candidates[index].generation_order = index;
+            index++;
+
+            int cursor = k - 1;
+            while (cursor >= 0 && combo[cursor] == n - k + cursor) {
+                cursor--;
+            }
+            if (cursor < 0) {
+                break;
+            }
+            combo[cursor]++;
+            for (int j = cursor + 1; j < k; j++) {
+                combo[j] = combo[j - 1] + 1;
+            }
         }
-        if (cursor < 0) {
-            break;
+
+        qsort(candidates, (size_t)total, sizeof(*candidates), compare_cycles);
+
+        if (keep < total) {
+            CycleCandidate *smaller = realloc(candidates, (size_t)keep * sizeof(*candidates));
+            if (smaller != NULL) {
+                candidates = smaller;
+            }
         }
-        combo[cursor]++;
-        for (int j = cursor + 1; j < k; j++) {
-            combo[j] = combo[j - 1] + 1;
-        }
+        set->stored = candidates;
+        set->count = keep;
     }
 
-    qsort(candidates, (size_t)total, sizeof(*candidates), compare_cycles);
-
-    if (keep < total) {
-        CycleCandidate *smaller = realloc(candidates, (size_t)keep * sizeof(*candidates));
-        if (smaller != NULL) {
-            candidates = smaller;
-        }
-    }
-
-    *kept_count = keep;
     printf("  Cycle size k:           %d\n", k);
     printf("  Total possible k-cycles: %llu\n", (unsigned long long)total);
     printf("  k-cycles selected:      %llu\n", (unsigned long long)keep);
     printf("  Percentage retained:    %.2f%%\n",
            total > 0 ? 100.0 * (double)keep / (double)total : 0.0);
     printf("  k-cycle ranking:        descending probability score\n");
-    return candidates;
+    printf("  k-cycle storage:        %s\n",
+           streaming ? "streamed (re-enumerated per scan, score cutoff)" : "stored in memory");
 }
 
 static void relocation_phase(WTAPInstance *inst, ParamSearchStats *stats, TimeBudget *budget) {
@@ -466,14 +617,54 @@ static int targets_are_distinct(const int *targets, int cycle_size) {
     return 1;
 }
 
-static int cycle_phase(WTAPInstance *inst, const CycleCandidate *candidates,
-                       uint64_t candidate_count, int cycle_size,
+/* Scores one k-cycle (every non-trivial rotation) and records it when it beats *best_gain. */
+static void evaluate_cycle(const WTAPInstance *inst, const SearchState *state,
+                           const int *weapons, int k, ParamSearchStats *stats,
+                           double *best_gain, int *best_weapons, int *best_shift) {
+    int targets[PARAM_MAX_CYCLE_SIZE];
+    for (int position = 0; position < k; position++) {
+        targets[position] = inst->assignment[weapons[position]];
+    }
+    if (!targets_are_distinct(targets, k)) {
+        return;
+    }
+
+    double old_cost = 0.0;
+    for (int position = 0; position < k; position++) {
+        int t = targets[position];
+        old_cost += inst->target_values[t] * state->survival[t];
+    }
+
+    for (int shift = 1; shift < k; shift++) {
+        double new_cost = 0.0;
+        for (int position = 0; position < k; position++) {
+            int incoming_position = (position - shift + k) % k;
+            int incoming_weapon = weapons[incoming_position];
+            int t = targets[position];
+            new_cost +=
+                inst->target_values[t] * state->except_product[weapons[position]]
+                * (1.0 - inst->prob[incoming_weapon][t]);
+        }
+
+        double gain = old_cost - new_cost;
+        stats->cycle_evaluations++;
+        if (gain > *best_gain) {
+            *best_gain = gain;
+            for (int position = 0; position < k; position++) {
+                best_weapons[position] = weapons[position];
+            }
+            *best_shift = shift;
+        }
+    }
+}
+
+static int cycle_phase(WTAPInstance *inst, const CycleSet *set,
                        ParamSearchStats *stats, TimeBudget *budget) {
     SearchState state;
     int accepted = 0;
-    int k = cycle_size;
+    int k = set->k;
 
-    if (k < PARAM_MIN_CYCLE_SIZE || candidate_count == 0) {
+    if (k < PARAM_MIN_CYCLE_SIZE || set->count == 0) {
         return 0;
     }
 
@@ -491,47 +682,38 @@ static int cycle_phase(WTAPInstance *inst, const CycleCandidate *candidates,
             best_weapons[i] = -1;
         }
 
-        for (uint64_t candidate = 0; candidate < candidate_count; candidate++) {
-            if ((candidate & 0x3FFU) == 0 && time_budget_expired(budget)) {
-                break;
-            }
-
-            const int *weapons = candidates[candidate].weapon;
-            int targets[PARAM_MAX_CYCLE_SIZE];
-            for (int position = 0; position < k; position++) {
-                targets[position] = inst->assignment[weapons[position]];
-            }
-            if (!targets_are_distinct(targets, k)) {
-                continue;
-            }
-
-            double old_cost = 0.0;
-            for (int position = 0; position < k; position++) {
-                int t = targets[position];
-                old_cost += inst->target_values[t] * state.survival[t];
-            }
-
-            for (int shift = 1; shift < k; shift++) {
-                double new_cost = 0.0;
-                for (int position = 0; position < k; position++) {
-                    int incoming_position = (position - shift + k) % k;
-                    int incoming_weapon = weapons[incoming_position];
-                    int t = targets[position];
-                    new_cost +=
-                        inst->target_values[t] * state.except_product[weapons[position]]
-                        * (1.0 - inst->prob[incoming_weapon][t]);
+        if (!set->streaming) {
+            for (uint64_t candidate = 0; candidate < set->count; candidate++) {
+                if ((candidate & 0x3FFU) == 0 && time_budget_expired(budget)) {
+                    break;
                 }
-
-                double gain = old_cost - new_cost;
-                stats->cycle_evaluations++;
-                if (gain > best_gain) {
-                    best_gain = gain;
-                    for (int position = 0; position < k; position++) {
-                        best_weapons[position] = weapons[position];
+                evaluate_cycle(inst, &state, set->stored[candidate].weapon, k, stats,
+                               &best_gain, best_weapons, &best_shift);
+            }
+        } else {
+            ComboIter it;
+            uint64_t ties_left = set->ties_to_keep;
+            uint64_t visited = 0;
+            combo_iter_init(&it, set->n, k, set->weapon_max);
+            do {
+                if ((visited++ & 0x3FFFU) == 0 && time_budget_expired(budget)) {
+                    break;
+                }
+                if (!set->include_all) {
+                    uint64_t key = score_key(it.prefix[k]);
+                    if (key < set->cutoff_key) {
+                        continue;
                     }
-                    best_shift = shift;
+                    if (key == set->cutoff_key) {
+                        if (ties_left == 0) {
+                            continue;
+                        }
+                        ties_left--;
+                    }
                 }
-            }
+                evaluate_cycle(inst, &state, it.combo, k, stats,
+                               &best_gain, best_weapons, &best_shift);
+            } while (combo_iter_next(&it));
         }
 
         if (best_weapons[0] < 0 || time_budget_expired(budget)) {
@@ -599,15 +781,14 @@ static int optimize_with_param_local_search(WTAPInstance *inst,
            settings.min_improvement, settings.top_percent, settings.time_limit_seconds,
            settings.cycle_size);
 
-    uint64_t candidate_count = 0;
+    CycleSet cycles;
     int candidate_failed = 0;
-    CycleCandidate *candidates =
-        select_cycle_candidates(inst, settings.top_percent, settings.cycle_size,
-                                &candidate_count, &candidate_failed);
+    select_cycle_candidates(inst, settings.top_percent, settings.cycle_size,
+                            &cycles, &candidate_failed);
     if (candidate_failed) {
         return 0;
     }
-    stats->cycle_candidates = candidate_count;
+    stats->cycle_candidates = cycles.count;
 
     for (int round = 1; round <= PARAM_MAX_PHASE_ITERATIONS; round++) {
         if (time_budget_expired(&budget)) {
@@ -623,7 +804,7 @@ static int optimize_with_param_local_search(WTAPInstance *inst,
 
         relocation_phase(inst, stats, &budget);
         swap_phase(inst, stats, &budget);
-        cycle_phase(inst, candidates, candidate_count, settings.cycle_size, stats, &budget);
+        cycle_phase(inst, &cycles, stats, &budget);
 
         double round_end = calculate_objective(inst);
         double improvement = round_start - round_end;
@@ -648,12 +829,20 @@ static int optimize_with_param_local_search(WTAPInstance *inst,
                    settings.min_improvement);
             break;
         }
+
+        /* min_improvement = 0 means "no threshold": run to convergence. A round that made
+         * no move gains exactly 0, which `improvement < 0` would never catch, so the loop
+         * would otherwise repeat identical empty rounds until the round cap. */
+        if (improvement <= 0.0) {
+            printf("  Stopping: no improving move found in this round.\n");
+            break;
+        }
     }
 
     stats->final_objective = calculate_objective(inst);
     stats->elapsed_seconds = time_budget_elapsed(&budget);
     stats->timed_out = budget.timed_out;
-    free(candidates);
+    free(cycles.stored);
     return 1;
 }
 
@@ -661,9 +850,9 @@ static void print_usage(const char *prog) {
     fprintf(stderr,
             "Usage: %s [min_improvement] [top_percent] [time_limit_seconds] [cycle_size] "
             "[--save-csv] [input_file] [results_csv]\n"
-            "  min_improvement    default %.4f\n"
+            "  min_improvement    default %.4f. 0 = no threshold (run until no move improves)\n"
             "  top_percent        default %.1f (range 0..100)\n"
-            "  time_limit_seconds default %.1f (minimum %.1f)\n"
+            "  time_limit_seconds default %.1f (minimum %.1f). Use a huge value for no limit.\n"
             "  cycle_size         default %d (range %d..%d). Omit it to keep %d.\n"
             "  --save-csv         write the results CSV (off unless this flag is present)\n",
             prog,
@@ -921,6 +1110,30 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     printf("Loaded instances: %d\n", count);
+
+    /* Check every instance before spending any time, so an unsupported cycle_size is
+     * reported immediately instead of after the earlier instances have already run
+     * (the CSV is only written once all instances are done). */
+    int infeasible = 0;
+    for (int i = 0; i < count; i++) {
+        uint64_t combinations = 0;
+        if (instances[i].num_weapons >= config.cycle_size
+            && binomial_exceeds(instances[i].num_weapons, config.cycle_size,
+                                PARAM_MAX_ENUMERATED_CYCLES, &combinations)) {
+            fprintf(stderr,
+                    "Error: instance %d (%d weapons): C(%d, %d) exceeds %llu k-cycle "
+                    "combinations. Use a smaller cycle_size.\n",
+                    instances[i].instance_id, instances[i].num_weapons,
+                    instances[i].num_weapons, config.cycle_size,
+                    (unsigned long long)PARAM_MAX_ENUMERATED_CYCLES);
+            infeasible = 1;
+        }
+    }
+    if (infeasible) {
+        free(instances);
+        free(results);
+        return 1;
+    }
 
     clock_t overall_start = clock();
 

@@ -31,6 +31,27 @@ bash scripts/sweep_threshold.sh   # results/experiments/circular-threshold-sweep
 
 Defaults assume `data/Instances_for_GA.txt` and paths under `results/`.
 
+### One configurable solver: `parameter_control_heuristic`
+
+Any cycle size, threshold and top-% from one binary (no separate 3-/4-/5-cycle programs):
+
+```bash
+make build/parameter_control_heuristic
+./build/parameter_control_heuristic [min_improvement] [top_percent] [time_limit_s] [cycle_size] \
+    --save-csv [input_file] [results_csv]
+
+# 4-cycles, top 50%, no threshold, effectively no time limit
+./build/parameter_control_heuristic 0 50 100000 4 --save-csv \
+    data/Instances_for_GA.txt results/experiments/my-run/param-4cycle.csv
+```
+
+- `min_improvement 0` = no threshold: best-improvement until a whole round finds no improving move.
+- `time_limit_s` is at least 16; pass a huge value to effectively disable it.
+- Large `C(n, k)` (e.g. k=4 on 200 weapons) is handled without storing every combination:
+  the kept top-% is selected exactly and re-enumerated per scan. Combinations above
+  4e9 are refused up front, before any instance runs.
+- Always pass an explicit `results_csv`, otherwise the default path is overwritten.
+
 ## Viewers
 
 ```bash
