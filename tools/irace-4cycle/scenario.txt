@@ -1,0 +1,30 @@
+############################################################
+## irace scenario for parameter_control_heuristic, cycle_size = 4
+## Tunable: min_improvement, top_percent
+## Fixed:   cycle_size = 4, time limit = TIME_LIMIT env var (start.sh, default 60)
+## Separate from tools/irace (3-cycle); results go to irace-4cycle/.
+############################################################
+
+execDir = "../../results/parameter-control/irace-4cycle"
+logFile = "irace.Rdata"
+
+parameterFile = "./parameters.txt"
+targetRunner  = "./target-runner"
+
+# Same 15 training instances as the 3-cycle setup (absolute paths in that list).
+trainInstancesDir  = ""
+trainInstancesFile = "../irace/instances/instances.list"
+
+# Budget: number of target-runner calls (one config x one instance).
+# start.sh overrides this with MAX_EXPERIMENTS=... when given.
+maxExperiments = 500
+
+# Deterministic as long as no run hits the time limit.
+deterministic = 1
+
+# Same racing settings as the 3-cycle scenario.
+firstTest = 15
+eachTest = 1
+
+seed = 42
+debugLevel = 1

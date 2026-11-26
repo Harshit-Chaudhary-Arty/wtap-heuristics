@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+# irace target-runner for parameter_control_heuristic with cycle_size = 4.
+# Separate from tools/irace/ (the 3-cycle setup), which is not touched.
+#
+# Arguments from irace:
+#   $1  candidate configuration id
+#   $2  instance id
+#   $3  seed
+#   $4  instance file path
+#   $5+ parameter switches: --min_improvement X --top_percent Y
+#
+# Environment (set by start.sh):
+#   TIME_LIMIT   per-instance wall-clock limit in seconds (default 60, solver minimum 16)
+#
+# Prints a single numeric cost (final objective; lower is better) to stdout.
+# Also appends one line per run to results/parameter-control/irace-4cycle/experiments.log
+# (gitignored) so you can see afterwards how many runs hit the time limit.
+set -euo pipefail
+
+CONFIG_ID="${1:?}"
+INSTANCE_ID="${2:?}"
+SEED="${3:?}"
+INSTANCE="${4:?}"
+shift 4
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+BIN="$ROOT/build/parameter_control_heuristic"
+CYCLE_SIZE=4
+TIME_LIMIT="${TIME_LIMIT:-60}"
+RUN_LOG="$ROOT/results/parameter-control/irace-4cycle/experiments.log"
+
+if [[ ! -x "$BIN" ]]; then
+  echo "error: missing binary $BIN (run: make build/parameter_control_heuristic)" >&2
+  exit 1
+fi
+
+MIN_IMPROVEMENT=0.01
+TOP_PERCENT=50
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --min_improvement|-min_improvement)
+      MIN_IMPROVEMENT="$2"
+      shift 2
+      ;;
+    --top_percent|-top_percent)
+      TOP_PERCENT="$2"
+      shift 2
+      ;;
+    *)
+      echo "error: unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+WORKDIR="${TMPDIR:-/tmp}/irace_pch4_${CONFIG_ID}_${INSTANCE_ID}_$$"
+mkdir -p "$WORKDIR"
+CSV="$WORKDIR/out.csv"
+LOG="$WORKDIR/run.log"
+trap 'rm -rf "$WORKDIR"' EXIT
+
+# Deterministic unless a run hits TIME_LIMIT; SEED is accepted for irace protocol.
+cd "$ROOT"
+set +e
+"$BIN" "$MIN_IMPROVEMENT" "$TOP_PERCENT" "$TIME_LIMIT" "$CYCLE_SIZE" --save-csv "$INSTANCE" "$CSV" \
+  >"$LOG" 2>&1
+status=$?
+set -e
+
+if [[ $status -ne 0 ]]; then
+  echo "error: solver failed (status=$status) for config=$CONFIG_ID instance=$INSTANCE_ID" >&2
+  tail -n 40 "$LOG" >&2 || true
+  exit $status
+fi
+
+RESULT="$(
+  python3 - "$CSV" "$LOG" <<'PY'
+import csv, re, sys
+csv_path, log_path = sys.argv[1], sys.argv[2]
+# Prefer the results CSV: cost, search time, timed-out flag.
+try:
+    with open(csv_path, newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if rows and "Final Objective" in rows[0]:
+        row = rows[0]
+        print(float(row["Final Objective"]),
+              row.get("Search Elapsed (s)", "nan"),
+              row.get("Timed Out", "nan"))
+        raise SystemExit(0)
+except SystemExit:
+    raise
+except Exception:
+    pass
+
+text = open(log_path, errors="replace").read()
+matches = re.findall(r"Final objective:\s*([0-9.+-eE]+)", text)
+if not matches:
+    raise SystemExit("could not parse final objective")
+print(float(matches[-1]), "nan", "nan")
+PY
+)"
+
+read -r COST ELAPSED TIMED_OUT <<<"$RESULT"
+
+mkdir -p "$(dirname "$RUN_LOG")"
+printf 'config=%s instance=%s min_improvement=%s top_percent=%s cost=%s elapsed_s=%s timed_out=%s limit_s=%s\n' \
+  "$CONFIG_ID" "$INSTANCE_ID" "$MIN_IMPROVEMENT" "$TOP_PERCENT" "$COST" "$ELAPSED" "$TIMED_OUT" "$TIME_LIMIT" \
+  >>"$RUN_LOG" || true
+
+# irace requires exactly one numeric cost on stdout
+printf '%s\n' "$COST"

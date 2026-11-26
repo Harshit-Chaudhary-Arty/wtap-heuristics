@@ -13,4 +13,9 @@ results/**/*.log
 results/parameter-control/irace/irace.Rdata
 results/parameter-control/irace/irace.stderr
 results/parameter-control/irace/irace.stdout
+results/parameter-control/irace-4cycle/irace.Rdata
+results/parameter-control/irace-4cycle/irace.stderr
+results/parameter-control/irace-4cycle/irace.stdout
+results/parameter-control/irace-4cycle/run-settings.env
+results/parameter-control/irace-4cycle/.export-stamp
 data/

@@ -1,0 +1,7 @@
+# Parameter space for algorithms/parameter_control_heuristic with cycle_size = 4.
+# Same ranges as the 3-cycle setup (tools/irace) so results are comparable.
+# time_limit is NOT tuned: it is fixed per run via TIME_LIMIT (see start.sh).
+# Cost = final objective (minimized).
+
+min_improvement "--min_improvement " r (0.001, 0.2)
+top_percent     "--top_percent "     r (5.0, 100.0)

@@ -2,3 +2,331 @@ bash tools/irace/apply_best.sh        # latest irace run
 bash tools/irace/apply_best.sh 2      # irace run 2
 
 MAX_EXPERIMENTS=500 bash tools/irace/start.sh
+
+
+./build/parameter_control_heuristic [min_improvement] [top_percent] [time_limit_seconds] [cycle_size] \
+    [--save-csv] [input_file] [results_csv]
+
+
+./build/9_circular_4_cycle 0.000000001 50 --save-csv \
+  data/Instances_for_GA.txt \
+  results/experiments/circular-4-cycle-no-threshold/circular-4-cycle.csv
+
+./build/parameter_control_heuristic 0.000000001 50 100000 4 \
+    --save-csv \
+  data/Instances_for_GA.txt \
+  results/experiments/circular-4-cycle-no-threshold/circular-4-cycle.csv
+
+
+
+harshit-chaudhary@supabase:~/DEI/major_project$ ./build/parameter_control_heuristic 0.4 50 100000 
+5 --save-csv   data/Instances_for_GA.txt results/experiments/my-run/5cycle+50+0.4.csv
+============================================================================
+WTAP: PARAMETER CONTROL HEURISTIC (4.4 BASE)
+============================================================================
+Input file: data/Instances_for_GA.txt
+Stopping threshold (min_improvement): 0.400000
+Cycle candidate percentage: 50.00%
+Per-instance time limit: 100000.000 seconds (minimum 16.0)
+Cycle size k: 5 (default 3, range 3..16)
+Loading instances...
+Loaded instances: 15
+
+Instance 1: 20 weapons x 10 targets
+  Global greedy MMR objective: 13.50386961
+  Parameters: min_improvement=0.400000, top_percent=50.00%, time_limit=100000.000s, cycle_size=5
+  Cycle size k:           5
+  Total possible k-cycles: 15504
+  k-cycles selected:      7752
+  Percentage retained:    50.00%
+  k-cycle ranking:        descending probability score
+  k-cycle storage:        stored in memory
+  Round 1: objective=11.57686053, improvement=1.92700908, relocate=0, swap=3, cycle=0, elapsed=0.003s
+  Round 2: objective=11.57686053, improvement=0.00000000, relocate=0, swap=0, cycle=0, elapsed=0.003s
+  Stopping: round improvement < 0.400000.
+  Final objective:       11.57686053
+  Objective reduction:   1.92700908
+  Percentage reduction:  14.27%
+  Runtime:               0.003 seconds
+  Search elapsed:        0.003 seconds
+  Accepted moves: relocate=0, swap=3, cycle=0
+----------------------------------------------------------------------------
+
+Instance 2: 20 weapons x 20 targets
+  Global greedy MMR objective: 156.88430000
+  Parameters: min_improvement=0.400000, top_percent=50.00%, time_limit=100000.000s, cycle_size=5
+  Cycle size k:           5
+  Total possible k-cycles: 15504
+  k-cycles selected:      7752
+  Percentage retained:    50.00%
+  k-cycle ranking:        descending probability score
+  k-cycle storage:        stored in memory
+  Round 1: objective=149.76520000, improvement=7.11910000, relocate=0, swap=3, cycle=0, elapsed=0.003s
+  Round 2: objective=149.76520000, improvement=0.00000000, relocate=0, swap=0, cycle=0, elapsed=0.003s
+  Stopping: round improvement < 0.400000.
+  Final objective:       149.76520000
+  Objective reduction:   7.11910000
+  Percentage reduction:  4.54%
+  Runtime:               0.003 seconds
+  Search elapsed:        0.003 seconds
+  Accepted moves: relocate=0, swap=3, cycle=0
+----------------------------------------------------------------------------
+
+Instance 3: 20 weapons x 40 targets
+  Global greedy MMR objective: 1102.56540000
+  Parameters: min_improvement=0.400000, top_percent=50.00%, time_limit=100000.000s, cycle_size=5
+  Cycle size k:           5
+  Total possible k-cycles: 15504
+  k-cycles selected:      7752
+  Percentage retained:    50.00%
+  k-cycle ranking:        descending probability score
+  k-cycle storage:        stored in memory
+  Round 1: objective=1096.38540000, improvement=6.18000000, relocate=0, swap=3, cycle=0, elapsed=0.003s
+  Round 2: objective=1091.02740000, improvement=5.35800000, relocate=1, swap=0, cycle=0, elapsed=0.004s
+  Round 3: objective=1091.02740000, improvement=0.00000000, relocate=0, swap=0, cycle=0, elapsed=0.004s
+  Stopping: round improvement < 0.400000.
+  Final objective:       1091.02740000
+  Objective reduction:   11.53800000
+  Percentage reduction:  1.05%
+  Runtime:               0.004 seconds
+  Search elapsed:        0.004 seconds
+  Accepted moves: relocate=1, swap=3, cycle=0
+----------------------------------------------------------------------------
+
+Instance 4: 40 weapons x 20 targets
+  Global greedy MMR objective: 18.91670538
+  Parameters: min_improvement=0.400000, top_percent=50.00%, time_limit=100000.000s, cycle_size=5
+  Cycle size k:           5
+  Total possible k-cycles: 658008
+  k-cycles selected:      329004
+  Percentage retained:    50.00%
+  k-cycle ranking:        descending probability score
+  k-cycle storage:        stored in memory
+  Round 1: objective=17.88220831, improvement=1.03449707, relocate=0, swap=4, cycle=2, elapsed=0.206s
+  Round 2: objective=17.43136577, improvement=0.45084254, relocate=0, swap=1, cycle=2, elapsed=0.251s
+  Round 3: objective=17.41898121, improvement=0.01238456, relocate=0, swap=1, cycle=0, elapsed=0.273s
+  Stopping: round improvement < 0.400000.
+  Final objective:       17.41898121
+  Objective reduction:   1.49772417
+  Percentage reduction:  7.92%
+  Runtime:               0.274 seconds
+  Search elapsed:        0.273 seconds
+  Accepted moves: relocate=0, swap=6, cycle=4
+----------------------------------------------------------------------------
+
+Instance 5: 40 weapons x 40 targets
+  Global greedy MMR objective: 298.43450000
+  Parameters: min_improvement=0.400000, top_percent=50.00%, time_limit=100000.000s, cycle_size=5
+  Cycle size k:           5
+  Total possible k-cycles: 658008
+  k-cycles selected:      329004
+  Percentage retained:    50.00%
+  k-cycle ranking:        descending probability score
+  k-cycle storage:        stored in memory
+  Round 1: objective=283.63110000, improvement=14.80340000, relocate=0, swap=10, cycle=2, elapsed=0.209s
+  Round 2: objective=282.90890000, improvement=0.72220000, relocate=0, swap=0, cycle=2, elapsed=0.265s
+  Round 3: objective=282.43730000, improvement=0.47160000, relocate=0, swap=1, cycle=0, elapsed=0.294s
+  Round 4: objective=282.43730000, improvement=0.00000000, relocate=0, swap=0, cycle=0, elapsed=0.323s
+  Stopping: round improvement < 0.400000.
+  Final objective:       282.43730000
+  Objective reduction:   15.99720000
+  Percentage reduction:  5.36%
+  Runtime:               0.324 seconds
+  Search elapsed:        0.323 seconds
+  Accepted moves: relocate=0, swap=11, cycle=4
+----------------------------------------------------------------------------
+
+Instance 6: 40 weapons x 80 targets
+  Global greedy MMR objective: 2185.79950000
+  Parameters: min_improvement=0.400000, top_percent=50.00%, time_limit=100000.000s, cycle_size=5
+  Cycle size k:           5
+  Total possible k-cycles: 658008
+  k-cycles selected:      329004
+  Percentage retained:    50.00%
+  k-cycle ranking:        descending probability score
+  k-cycle storage:        stored in memory
+  Round 1: objective=2176.44050000, improvement=9.35900000, relocate=0, swap=7, cycle=0, elapsed=0.180s
+  Round 2: objective=2176.44050000, improvement=0.00000000, relocate=0, swap=0, cycle=0, elapsed=0.206s
+  Stopping: round improvement < 0.400000.
+  Final objective:       2176.44050000
+  Objective reduction:   9.35900000
+  Percentage reduction:  0.43%
+  Runtime:               0.207 seconds
+  Search elapsed:        0.206 seconds
+  Accepted moves: relocate=0, swap=7, cycle=0
+----------------------------------------------------------------------------
+
+Instance 7: 80 weapons x 40 targets
+  Global greedy MMR objective: 29.70020484
+  Parameters: min_improvement=0.400000, top_percent=50.00%, time_limit=100000.000s, cycle_size=5
+  Cycle size k:           5
+  Total possible k-cycles: 24040016
+  k-cycles selected:      12020008
+  Percentage retained:    50.00%
+  k-cycle ranking:        descending probability score
+  k-cycle storage:        streamed (re-enumerated per scan, score cutoff)
+  Round 1: objective=29.05262155, improvement=0.64758329, relocate=0, swap=6, cycle=2, elapsed=2.520s
+  Round 2: objective=28.77027366, improvement=0.28234789, relocate=0, swap=2, cycle=2, elapsed=4.529s
+  Stopping: round improvement < 0.400000.
+  Final objective:       28.77027366
+  Objective reduction:   0.92993118
+  Percentage reduction:  3.13%
+  Runtime:               4.527 seconds
+  Search elapsed:        4.529 seconds
+  Accepted moves: relocate=0, swap=8, cycle=4
+----------------------------------------------------------------------------
+
+Instance 8: 80 weapons x 80 targets
+  Global greedy MMR objective: 553.17200000
+  Parameters: min_improvement=0.400000, top_percent=50.00%, time_limit=100000.000s, cycle_size=5
+  Cycle size k:           5
+  Total possible k-cycles: 24040016
+  k-cycles selected:      12020008
+  Percentage retained:    50.00%
+  k-cycle ranking:        descending probability score
+  k-cycle storage:        streamed (re-enumerated per scan, score cutoff)
+  Round 1: objective=539.37160000, improvement=13.80040000, relocate=0, swap=9, cycle=2, elapsed=2.787s
+  Round 2: objective=539.21440000, improvement=0.15720000, relocate=0, swap=0, cycle=2, elapsed=5.046s
+  Stopping: round improvement < 0.400000.
+  Final objective:       539.21440000
+  Objective reduction:   13.95760000
+  Percentage reduction:  2.52%
+  Runtime:               5.044 seconds
+  Search elapsed:        5.046 seconds
+  Accepted moves: relocate=0, swap=9, cycle=4
+----------------------------------------------------------------------------
+
+Instance 9: 80 weapons x 160 targets
+  Global greedy MMR objective: 4315.97680000
+  Parameters: min_improvement=0.400000, top_percent=50.00%, time_limit=100000.000s, cycle_size=5
+  Cycle size k:           5
+  Total possible k-cycles: 24040016
+  k-cycles selected:      12020008
+  Percentage retained:    50.00%
+  k-cycle ranking:        descending probability score
+  k-cycle storage:        streamed (re-enumerated per scan, score cutoff)
+  Round 1: objective=4297.97940000, improvement=17.99740000, relocate=0, swap=7, cycle=2, elapsed=2.797s
+  Round 2: objective=4294.75860000, improvement=3.22080000, relocate=1, swap=1, cycle=2, elapsed=5.057s
+  Round 3: objective=4292.60100000, improvement=2.15760000, relocate=1, swap=0, cycle=1, elapsed=7.325s
+  Round 4: objective=4292.60100000, improvement=0.00000000, relocate=0, swap=0, cycle=0, elapsed=8.465s
+  Stopping: round improvement < 0.400000.
+  Final objective:       4292.60100000
+  Objective reduction:   23.37580000
+  Percentage reduction:  0.54%
+  Runtime:               8.462 seconds
+  Search elapsed:        8.465 seconds
+  Accepted moves: relocate=2, swap=8, cycle=5
+----------------------------------------------------------------------------
+
+Instance 10: 100 weapons x 50 targets
+  Global greedy MMR objective: 34.41923094
+  Parameters: min_improvement=0.400000, top_percent=50.00%, time_limit=100000.000s, cycle_size=5
+  Cycle size k:           5
+  Total possible k-cycles: 75287520
+  k-cycles selected:      37643760
+  Percentage retained:    50.00%
+  k-cycle ranking:        descending probability score
+  k-cycle storage:        streamed (re-enumerated per scan, score cutoff)
+  Round 1: objective=33.03518591, improvement=1.38404503, relocate=0, swap=12, cycle=2, elapsed=8.450s
+  Round 2: objective=32.94554487, improvement=0.08964104, relocate=0, swap=1, cycle=2, elapsed=15.220s
+  Stopping: round improvement < 0.400000.
+  Final objective:       32.94554487
+  Objective reduction:   1.47368607
+  Percentage reduction:  4.28%
+  Runtime:               15.214 seconds
+  Search elapsed:        15.220 seconds
+  Accepted moves: relocate=0, swap=13, cycle=4
+----------------------------------------------------------------------------
+
+Instance 11: 100 weapons x 100 targets
+  Global greedy MMR objective: 653.04260000
+  Parameters: min_improvement=0.400000, top_percent=50.00%, time_limit=100000.000s, cycle_size=5
+  Cycle size k:           5
+  Total possible k-cycles: 75287520
+  k-cycles selected:      37643760
+  Percentage retained:    50.00%
+  k-cycle ranking:        descending probability score
+  k-cycle storage:        streamed (re-enumerated per scan, score cutoff)
+  Round 1: objective=642.26430000, improvement=10.77830000, relocate=0, swap=5, cycle=2, elapsed=8.978s
+  Round 2: objective=640.49560000, improvement=1.76870000, relocate=0, swap=0, cycle=2, elapsed=16.459s
+  Round 3: objective=639.24130000, improvement=1.25430000, relocate=0, swap=0, cycle=2, elapsed=23.865s
+  Round 4: objective=638.07340000, improvement=1.16790000, relocate=0, swap=0, cycle=2, elapsed=31.415s
+  Round 5: objective=638.05770000, improvement=0.01570000, relocate=0, swap=0, cycle=1, elapsed=38.896s
+  Stopping: round improvement < 0.400000.
+  Final objective:       638.05770000
+  Objective reduction:   14.98490000
+  Percentage reduction:  2.29%
+  Runtime:               38.880 seconds
+  Search elapsed:        38.896 seconds
+  Accepted moves: relocate=0, swap=5, cycle=9
+----------------------------------------------------------------------------
+
+Instance 12: 100 weapons x 200 targets
+  Global greedy MMR objective: 5114.68280000
+  Parameters: min_improvement=0.400000, top_percent=50.00%, time_limit=100000.000s, cycle_size=5
+  Cycle size k:           5
+  Total possible k-cycles: 75287520
+  k-cycles selected:      37643760
+  Percentage retained:    50.00%
+  k-cycle ranking:        descending probability score
+  k-cycle storage:        streamed (re-enumerated per scan, score cutoff)
+  Round 1: objective=5095.34410000, improvement=19.33870000, relocate=0, swap=9, cycle=2, elapsed=9.062s
+  Round 2: objective=5088.14210000, improvement=7.20200000, relocate=1, swap=1, cycle=2, elapsed=16.432s
+  Round 3: objective=5086.83460000, improvement=1.30750000, relocate=0, swap=0, cycle=2, elapsed=23.811s
+  Round 4: objective=5085.85780000, improvement=0.97680000, relocate=0, swap=0, cycle=2, elapsed=31.112s
+  Round 5: objective=5085.80250000, improvement=0.05530000, relocate=1, swap=0, cycle=0, elapsed=34.792s
+  Stopping: round improvement < 0.400000.
+  Final objective:       5085.80250000
+  Objective reduction:   28.88030000
+  Percentage reduction:  0.56%
+  Runtime:               34.782 seconds
+  Search elapsed:        34.792 seconds
+  Accepted moves: relocate=2, swap=10, cycle=8
+----------------------------------------------------------------------------
+
+Instance 13: 200 weapons x 100 targets
+  Global greedy MMR objective: 71.33400823
+  Parameters: min_improvement=0.400000, top_percent=50.00%, time_limit=100000.000s, cycle_size=5
+  Cycle size k:           5
+  Total possible k-cycles: 2535650040
+  k-cycles selected:      1267825020
+  Percentage retained:    50.00%
+  k-cycle ranking:        descending probability score
+  k-cycle storage:        streamed (re-enumerated per scan, score cutoff)
+  Round 1: objective=69.83188278, improvement=1.50212545, relocate=0, swap=21, cycle=2, elapsed=304.576s
+  Round 2: objective=69.53962789, improvement=0.29225489, relocate=0, swap=5, cycle=2, elapsed=557.695s
+  Stopping: round improvement < 0.400000.
+  Final objective:       69.53962789
+  Objective reduction:   1.79438034
+  Percentage reduction:  2.52%
+  Runtime:               557.640 seconds
+  Search elapsed:        557.695 seconds
+  Accepted moves: relocate=0, swap=26, cycle=4
+----------------------------------------------------------------------------
+
+Instance 14: 200 weapons x 200 targets
+  Global greedy MMR objective: 1247.00420000
+  Parameters: min_improvement=0.400000, top_percent=50.00%, time_limit=100000.000s, cycle_size=5
+  Cycle size k:           5
+  Total possible k-cycles: 2535650040
+  k-cycles selected:      1267825020
+  Percentage retained:    50.00%
+  k-cycle ranking:        descending probability score
+  k-cycle storage:        streamed (re-enumerated per scan, score cutoff)
+  Round 1: objective=1234.22650000, improvement=12.77770000, relocate=0, swap=13, cycle=2, elapsed=324.569s
+  Round 2: objective=1232.81180000, improvement=1.41470000, relocate=0, swap=4, cycle=2, elapsed=593.229s
+  Round 3: objective=1231.44150000, improvement=1.37030000, relocate=0, swap=2, cycle=2, elapsed=862.564s
+  Round 4: objective=1230.79330000, improvement=0.64820000, relocate=0, swap=0, cycle=2, elapsed=1134.388s
+  Round 5: objective=1230.37310000, improvement=0.42020000, relocate=0, swap=0, cycle=2, elapsed=1399.606s
+    Round 3: objective=1231.44150000, improvement=1.37030000, relocate=0, swap=2, cycle=2, elapsed=862.564s
+  Round 4: objective=1230.79330000, improvement=0.64820000, relocate=0, swap=0, cycle=2, elapsed=1134.388s
+  Round 5: objective=1230.37310000, improvement=0.42020000, relocate=0, swap=0, cycle=2, elapsed=1399.606s
+  Round 6: objective=1230.31740000, improvement=0.05570000, relocate=0, swap=0, cycle=2, elapsed=1648.987s
+  Stopping: round improvement < 0.400000.
+  Final objective:       1230.31740000
+  Objective reduction:   16.68680000
+  Percentage reduction:  1.34%
+  Runtime:               1648.601 seconds
+  Search elapsed:        1648.987 seconds
+  Accepted moves: relocate=0, swap=19, cycle=12
+----------------------------------------------------------------------------
