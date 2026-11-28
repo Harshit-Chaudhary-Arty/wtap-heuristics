@@ -11,6 +11,11 @@ import {
   formatTime,
   objectiveHeatColor,
 } from "../lib/heatmap";
+import {
+  normalizePath,
+  parseRoute,
+  writeRoute,
+} from "../lib/routing";
 import type { CompareAlgo, ComparePayload, CompareRow } from "../types";
 
 type SortKey =
@@ -57,6 +62,45 @@ function rowValue(row: CompareRow, key: SortKey): number | null {
   return null;
 }
 
+function selectionFromRoute(
+  algorithms: CompareAlgo[],
+  algos: string[] | null,
+): Set<string> {
+  if (algos === null) {
+    return new Set(algorithms.map((a) => a.id));
+  }
+  if (algos.length === 0) {
+    return new Set();
+  }
+  const wanted = new Set(algos.map(normalizePath));
+  const next = new Set<string>();
+  for (const algo of algorithms) {
+    if (wanted.has(normalizePath(algo.path)) || wanted.has(algo.id)) {
+      next.add(algo.id);
+    }
+  }
+  return next;
+}
+
+function syncCompareUrl(
+  algorithms: CompareAlgo[],
+  selected: Set<string>,
+  mode: "push" | "replace" = "replace",
+): void {
+  if (selected.size === 0) {
+    writeRoute({ kind: "compare", algos: [] }, mode);
+    return;
+  }
+  if (selected.size === algorithms.length) {
+    writeRoute({ kind: "compare", algos: null }, mode);
+    return;
+  }
+  const paths = algorithms
+    .filter((a) => selected.has(a.id))
+    .map((a) => a.path);
+  writeRoute({ kind: "compare", algos: paths }, mode);
+}
+
 export function CompareView() {
   const [data, setData] = useState<ComparePayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,6 +113,7 @@ export function CompareView() {
   });
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const skipUrlWrite = useRef(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,7 +123,11 @@ export function CompareView() {
       .then((payload) => {
         if (cancelled) return;
         setData(payload);
-        setSelected(new Set(payload.algorithms.map((a) => a.id)));
+        const route = parseRoute();
+        const fromUrl =
+          route.kind === "compare" ? route.algos : null;
+        skipUrlWrite.current = true;
+        setSelected(selectionFromRoute(payload.algorithms, fromUrl));
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -94,6 +143,30 @@ export function CompareView() {
       cancelled = true;
     };
   }, []);
+
+  // Keep ?view=compare&a=… in sync with the checkbox selection.
+  useEffect(() => {
+    if (!data) return;
+    if (skipUrlWrite.current) {
+      skipUrlWrite.current = false;
+      return;
+    }
+    syncCompareUrl(data.algorithms, selected, "replace");
+  }, [data, selected]);
+
+  // Browser Back/Forward while staying on the compare page.
+  useEffect(() => {
+    if (!data) return;
+    const algorithms = data.algorithms;
+    function onPopState() {
+      const route = parseRoute();
+      if (route.kind !== "compare") return;
+      skipUrlWrite.current = true;
+      setSelected(selectionFromRoute(algorithms, route.algos));
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [data]);
 
   useEffect(() => {
     if (!menuOpen) return;

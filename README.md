@@ -31,6 +31,26 @@ bash scripts/sweep_threshold.sh   # results/experiments/circular-threshold-sweep
 
 Defaults assume `data/Instances_for_GA.txt` and paths under `results/`.
 
+### Typed paper instances: `wta_types_heuristic`
+
+Self-contained (no `shared/` link). Same MMR + relocate + swap + top-% k-cycle
+controls as `parameter_control_heuristic`, for Andersen–Pavlikov–Toffolo files
+under `data/data_toffolo/`. Pass a **directory** to solve all `*.txt` smallest→largest
+into one compiled CSV (or pass a single file):
+
+```bash
+make build/wta_types_heuristic
+# all Toffolo instances, MMR + 3-cycle + 50%
+./build/wta_types_heuristic 0.01 50 100000 3 --save-csv \
+    data/data_toffolo results/paper-instances/toffolo-k3-50.csv
+# same with 4-cycles
+./build/wta_types_heuristic 0.01 50 100000 4 --save-csv \
+    data/data_toffolo results/paper-instances/toffolo-k4-50.csv
+```
+
+Default `input_path` is `data/data_toffolo`. For k=3 ranking is exact over weapons
+when C(W,k) fits; for very large C(W,4) it falls back to type-tuples.
+
 ### One configurable solver: `parameter_control_heuristic`
 
 Any cycle size, threshold and top-% from one binary (no separate 3-/4-/5-cycle programs):

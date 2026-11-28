@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { displayName, searchText } from "../lib/labels";
 import { READ_ONLY } from "../lib/mode";
+import { ancestorFolders } from "../lib/routing";
 import type { TreeNode } from "../types";
 
 type SidebarProps = {
@@ -393,8 +394,30 @@ export function Sidebar({
   onDelete,
 }: SidebarProps) {
   const [query, setQuery] = useState("");
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set([""]));
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const initial = new Set([""]);
+    if (selectedPath) {
+      for (const folder of ancestorFolders(selectedPath)) initial.add(folder);
+    }
+    return initial;
+  });
   const [creating, setCreating] = useState(false);
+
+  // Deep links / selection: keep ancestor folders open so the file is visible.
+  useEffect(() => {
+    if (!selectedPath) return;
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const folder of ancestorFolders(selectedPath)) {
+        if (!next.has(folder)) {
+          next.add(folder);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [selectedPath]);
   const [uploading, setUploading] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [busy, setBusy] = useState(false);

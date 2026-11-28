@@ -13,5 +13,14 @@
     "(500)-config-1.csv",
     "(1000)-config-3.csv",
     "(1500)-config-4.csv"
+  ],
+  "parameter-control/Irace Algo Result": [
+    "(500)-applied-1.csv",
+    "(100)-applied-2.csv",
+    "(1000)-applied-3.csv",
+    "(1500)-applied-4.csv",
+    "(2000)-applied-5.csv",
+    "(1500)-applied-7.csv",
+    "(2000)-applied-8.csv"
   ]
 }

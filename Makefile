@@ -28,7 +28,10 @@ ALGOS = 1_fixed_order_sequential_greedy \
         9_circular_4_cycle \
         parameter_control_heuristic
 
-BINS = $(addprefix $(BUILD)/,$(ALGOS))
+# Fully self-contained (no shared/*.o). Paper typed-instance format.
+STANDALONE = wta_types_heuristic
+
+BINS = $(addprefix $(BUILD)/,$(ALGOS)) $(addprefix $(BUILD)/,$(STANDALONE))
 
 all: $(BINS)
 
@@ -62,6 +65,9 @@ $(BUILD)/$(1): algorithms/$(1)/main.c $(SHARED_OBJS) $(if $(filter 3_1_%,$(1)),$
 endef
 
 $(foreach algo,$(ALGOS),$(eval $(call ALGO_RULE,$(algo))))
+
+$(BUILD)/wta_types_heuristic: algorithms/wta_types_heuristic/main.c | $(BUILD)
+	$(CC) $(CFLAGS) -o $@ algorithms/wta_types_heuristic/main.c $(LDFLAGS)
 
 clean:
 	rm -rf $(BUILD)
@@ -105,4 +111,7 @@ run-9: $(BUILD)/9_circular_4_cycle
 run-param: $(BUILD)/parameter_control_heuristic
 	./$(BUILD)/parameter_control_heuristic --save-csv
 
-.PHONY: all clean run-1 run-2 run-3 run-3-1 run-4 run-4-1 run-4-2 run-4-3 run-4-4 run-5 run-6 run-9 run-param
+run-wta-types: $(BUILD)/wta_types_heuristic
+	./$(BUILD)/wta_types_heuristic 0.01 50 100000 3 --save-csv data/data_toffolo
+
+.PHONY: all clean run-1 run-2 run-3 run-3-1 run-4 run-4-1 run-4-2 run-4-3 run-4-4 run-5 run-6 run-9 run-param run-wta-types

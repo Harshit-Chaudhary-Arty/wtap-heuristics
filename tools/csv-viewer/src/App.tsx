@@ -14,6 +14,12 @@ import { Sidebar } from "./components/Sidebar";
 import type { CsvPayload, TreeNode } from "./types";
 import { formatTime, totalCsvTime } from "./lib/heatmap";
 import { READ_ONLY } from "./lib/mode";
+import {
+  fileShareUrl,
+  normalizePath,
+  parseRoute,
+  writeRoute,
+} from "./lib/routing";
 
 type ViewMode = "browse" | "compare";
 
@@ -26,11 +32,25 @@ function fileNameFromPath(path: string): string {
   return path.split("/").pop() ?? path;
 }
 
+function treeHasFile(node: TreeNode, path: string): boolean {
+  if (node.type === "file" && node.path === path) return true;
+  return (node.children ?? []).some((child) => treeHasFile(child, path));
+}
+
 export default function App() {
-  const [viewMode, setViewMode] = useState<ViewMode>("browse");
+  const initialRoute = parseRoute();
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    initialRoute.kind === "compare" ? "compare" : "browse",
+  );
   const [tree, setTree] = useState<TreeNode | null>(null);
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const [selectedFolder, setSelectedFolder] = useState("");
+  const [selectedPath, setSelectedPath] = useState<string | null>(
+    initialRoute.kind === "file" ? initialRoute.path : null,
+  );
+  const [selectedFolder, setSelectedFolder] = useState(() => {
+    if (initialRoute.kind !== "file") return "";
+    const path = initialRoute.path;
+    return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+  });
   const [csv, setCsv] = useState<CsvPayload | null>(null);
   const [loadingTree, setLoadingTree] = useState(true);
   const [loadingCsv, setLoadingCsv] = useState(false);
@@ -38,6 +58,7 @@ export default function App() {
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [renameBusy, setRenameBusy] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const refreshTree = useCallback(async () => {
     setLoadingTree(true);
@@ -55,6 +76,44 @@ export default function App() {
   useEffect(() => {
     void refreshTree();
   }, [refreshTree]);
+
+  // After the tree loads, validate a deep-linked file still exists.
+  useEffect(() => {
+    if (!tree || loadingTree || viewMode !== "browse" || !selectedPath) return;
+    if (!treeHasFile(tree, selectedPath)) {
+      setError(`Linked CSV not found: ${selectedPath}`);
+      setSelectedPath(null);
+      setCsv(null);
+      writeRoute({ kind: "home" }, "replace");
+    }
+  }, [tree, loadingTree, viewMode, selectedPath]);
+
+  // Keep the address bar in sync and support Back/Forward.
+  useEffect(() => {
+    function onPopState() {
+      const route = parseRoute();
+      setRenaming(false);
+      setLinkCopied(false);
+      if (route.kind === "compare") {
+        setViewMode("compare");
+        setSelectedPath(null);
+        return;
+      }
+      setViewMode("browse");
+      if (route.kind === "file") {
+        setSelectedPath(route.path);
+        setSelectedFolder(
+          route.path.includes("/")
+            ? route.path.slice(0, route.path.lastIndexOf("/"))
+            : "",
+        );
+      } else {
+        setSelectedPath(null);
+      }
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   useEffect(() => {
     if (viewMode !== "browse" || !selectedPath) {
@@ -95,17 +154,45 @@ export default function App() {
     [csv],
   );
 
-  function handleSelectFile(path: string) {
+  function handleSelectFile(path: string, historyMode: "push" | "replace" = "push") {
+    const normalized = normalizePath(path);
     setViewMode("browse");
-    setSelectedPath(path);
-    const parent = path.includes("/")
-      ? path.slice(0, path.lastIndexOf("/"))
+    setSelectedPath(normalized);
+    setLinkCopied(false);
+    const parent = normalized.includes("/")
+      ? normalized.slice(0, normalized.lastIndexOf("/"))
       : "";
     setSelectedFolder(parent);
+    writeRoute({ kind: "file", path: normalized }, historyMode);
+  }
+
+  function handleOpenCompare() {
+    setRenaming(false);
+    setLinkCopied(false);
+    setViewMode("compare");
+    // Selection details (?a=…) are owned by CompareView once it mounts.
+    writeRoute({ kind: "compare", algos: null });
   }
 
   function handleSelectFolder(path: string) {
     setSelectedFolder(path);
+  }
+
+  async function handleCopyLink() {
+    const url =
+      viewMode === "compare"
+        ? window.location.href
+        : selectedPath
+          ? fileShareUrl(selectedPath)
+          : null;
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setLinkCopied(true);
+      window.setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      window.prompt("Copy this link:", url);
+    }
   }
 
   async function handleCreateFolder(name: string, parent: string) {
@@ -116,8 +203,7 @@ export default function App() {
   async function handleUpload(folder: string, file: File) {
     const created = await uploadCsv(folder, file);
     await refreshTree();
-    setViewMode("browse");
-    setSelectedPath(created.path);
+    handleSelectFile(created.path);
   }
 
   async function handleReorder(parent: string, names: string[]) {
@@ -160,6 +246,7 @@ export default function App() {
       setSelectedPath(null);
       setCsv(null);
       setRenaming(false);
+      writeRoute({ kind: "home" }, "replace");
     }
     if (
       selectedFolder === node.path ||
@@ -198,6 +285,7 @@ export default function App() {
           : prev,
       );
       setRenaming(false);
+      writeRoute({ kind: "file", path: renamed.path }, "replace");
       await refreshTree();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to rename CSV");
@@ -213,10 +301,7 @@ export default function App() {
         selectedPath={viewMode === "browse" ? selectedPath : null}
         selectedFolder={selectedFolder}
         compareActive={viewMode === "compare"}
-        onOpenCompare={() => {
-          setRenaming(false);
-          setViewMode("compare");
-        }}
+        onOpenCompare={handleOpenCompare}
         onSelectFile={(path) => {
           setRenaming(false);
           handleSelectFile(path);
@@ -293,6 +378,55 @@ export default function App() {
                         ? "Loading…"
                         : "Select a CSV"}
                 </h1>
+                {((viewMode === "browse" && selectedPath) ||
+                  viewMode === "compare") && (
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title={linkCopied ? "Link copied" : "Copy shareable link"}
+                    aria-label={linkCopied ? "Link copied" : "Copy shareable link"}
+                    onClick={() => void handleCopyLink()}
+                  >
+                    {linkCopied ? (
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M3.5 8.5l3 3 6-7"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    ) : (
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M6.5 9.5a3 3 0 0 0 4.2.2l1.8-1.8a3 3 0 0 0-4.2-4.2L7.5 4.5"
+                          stroke="currentColor"
+                          strokeWidth="1.4"
+                          strokeLinecap="round"
+                        />
+                        <path
+                          d="M9.5 6.5a3 3 0 0 0-4.2-.2L3.5 8.1a3 3 0 0 0 4.2 4.2L8.5 11.5"
+                          stroke="currentColor"
+                          strokeWidth="1.4"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    )}
+                  </button>
+                )}
                 {!READ_ONLY && viewMode === "browse" && selectedPath && (
                   <button
                     type="button"
